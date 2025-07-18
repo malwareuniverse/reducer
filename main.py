@@ -1,0 +1,368 @@
+
+from contextlib import asynccontextmanager
+from typing import Optional, List, Dict, Any
+from pydantic import AnyHttpUrl
+
+import time
+
+from weaviate.collections.classes.config import Configure, Property, DataType
+
+
+from fastapi import FastAPI, HTTPException, Depends
+from pydantic import BaseModel
+import numpy as np
+
+# Own Modules
+from dimensionality_reducer import DRMethod, DRFactory
+from weaviate_client import WeaviateClient
+
+N_samples = 1024
+D_dimensions = 1024
+
+weaviate_client = None
+
+# Pydantic Response Models
+class BaseDataResponse(BaseModel):
+    shape: List[int]
+    method_applied: str
+    dr_applied: bool
+    data: List[List[float]]
+    message: str
+
+class GenerateDataResponse(BaseDataResponse):
+    data_source: str = "random"
+
+class QueryWeaviateResponse(BaseDataResponse):
+    data_source: str = "weaviate"
+    collection_name: str
+    original_vector_count: int
+    metadata: List[Dict[str, Any]]
+    query: str
+
+class WeaviateCollectionsResponse(BaseModel):
+    collections: List[str]
+
+class AvailableMethodsResponse(BaseModel):
+    available_methods: List[str]
+    all_methods: List[str]
+
+class RootResponse(BaseModel):
+    status: str
+
+@asynccontextmanager
+async def lifespan(fastapi_app: FastAPI):
+    global weaviate_client
+    weaviate_client = WeaviateClient(port=5000, grpc_port=50051)
+    _create_collection()
+    yield
+    print(weaviate_client)
+    if weaviate_client:
+        weaviate_client.close()
+
+# Dependency function
+def get_weaviate_client() -> Optional[WeaviateClient]:
+    if weaviate_client is None:
+        raise HTTPException(status_code=500, detail="Weaviate client not initialized")
+    return weaviate_client
+
+# FastAPI app with lifespan
+app = FastAPI(
+    title="Multi-Algorithm Dimensionality Reduction API with Weaviate",
+    description=f"Generates random data or queries Weaviate, then applies various DR algorithms.",
+    version="2.1.0",
+    lifespan=lifespan
+)
+
+
+@app.get(
+    "/generate_data",
+    response_model=GenerateDataResponse,
+    summary="Generate random data with optional dimensionality reduction",
+    response_description="A JSON object containing the generated data or DR embedding."
+)
+async def generate_and_transform_data(
+        apply_dr: bool = True,
+        dr_method: DRMethod = DRMethod.PACMAP,
+        n_components: int = 3,
+        pacmap_n_neighbors: int = 10,
+        pacmap_mn_ratio: float = 0.5,
+        pacmap_fp_ratio: float = 2.0,
+        umap_n_neighbors: int = 15,
+        umap_min_dist: float = 0.1,
+        umap_metric: str = "euclidean",
+        trimap_n_inliers: int = 10,
+        trimap_n_outliers: int = 5,
+        trimap_n_random: int = 5,
+        verbose: bool = True
+) -> GenerateDataResponse:
+    """Generate random dataset and optionally apply dimensionality reduction."""
+
+    X_test_data = np.random.randn(N_samples, D_dimensions)
+
+    # If apply_dr is False, return original data without DR
+    if not apply_dr:
+        data_to_return = X_test_data
+        dr_applied_result = False
+        dr_error = None
+        method_name = "None"
+    else:
+        # Apply dimensionality reduction
+        data_to_return, dr_applied_result, dr_error, method_name = _apply_dimensionality_reduction(
+            X_test_data, apply_dr, dr_method, n_components,
+            pacmap_n_neighbors, pacmap_mn_ratio, pacmap_fp_ratio,
+            umap_n_neighbors, umap_min_dist, umap_metric,
+            trimap_n_inliers, trimap_n_outliers, trimap_n_random,
+            verbose
+        )
+
+    result_list = data_to_return.tolist()
+    message = _get_response_message(dr_applied_result, dr_error, method_name, dr_method, n_components)
+
+    return GenerateDataResponse(
+        shape=list(data_to_return.shape),
+        method_applied=method_name,
+        dr_applied=dr_applied_result,
+        data=result_list,
+        data_source="random",
+        message=message
+    )
+
+@app.get(
+    "/query_weaviate",
+    response_model=QueryWeaviateResponse,
+    summary="Query Weaviate and apply dimensionality reduction",
+    response_description="A JSON object containing Weaviate data with optional DR embedding."
+)
+async def query_and_transform_weaviate_data(
+        collection_name: str,
+        query: str = "",
+        limit: int = 100,
+        vector_field: Optional[str] = None,
+        apply_dr: bool = True,
+        dr_method: DRMethod = DRMethod.PACMAP,
+        n_components: int = 3,
+        pacmap_n_neighbors: int = 10,
+        pacmap_mn_ratio: float = 0.5,
+        pacmap_fp_ratio: float = 2.0,
+        umap_n_neighbors: int = 15,
+        umap_min_dist: float = 0.1,
+        umap_metric: str = "euclidean",
+        trimap_n_inliers: int = 10,
+        trimap_n_outliers: int = 5,
+        trimap_n_random: int = 5,
+        verbose: bool = True,
+        client: WeaviateClient = Depends(get_weaviate_client)
+) -> QueryWeaviateResponse:
+    """Query Weaviate for vectors and optionally apply dimensionality reduction."""
+
+    # Get data from Weaviate using the injected client
+    X_weaviate_data, metadata = client.query_vectors(
+        collection_name=collection_name,
+        query=query,
+        limit=limit,
+        vector_field=vector_field
+    )
+    print(apply_dr)
+    # If apply_dr is False, return original vectors without DR
+    if not apply_dr:
+        data_to_return = X_weaviate_data
+        dr_applied_result = False
+        dr_error = None
+        method_name = "None"
+    else:
+        # Apply dimensionality reduction
+        data_to_return, dr_applied_result, dr_error, method_name = _apply_dimensionality_reduction(
+            X_weaviate_data, apply_dr, dr_method, n_components,
+            pacmap_n_neighbors, pacmap_mn_ratio, pacmap_fp_ratio,
+            umap_n_neighbors, umap_min_dist, umap_metric,
+            trimap_n_inliers, trimap_n_outliers, trimap_n_random,
+            verbose
+        )
+
+    result_list = data_to_return.tolist()
+    message = _get_response_message(dr_applied_result, dr_error, method_name, dr_method, n_components)
+
+    return QueryWeaviateResponse(
+        shape=list(data_to_return.shape),
+        method_applied=method_name,
+        dr_applied=dr_applied_result,
+        data=result_list,
+        data_source="weaviate",
+        collection_name=collection_name,
+        query=query,
+        original_vector_count=len(metadata),
+        metadata=metadata[:10] if len(metadata) > 10 else metadata,
+        message=message
+    )
+
+@app.get(
+    "/weaviate_collections",
+    response_model=WeaviateCollectionsResponse
+)
+async def list_weaviate_collections(
+        client: WeaviateClient = Depends(get_weaviate_client)
+) -> WeaviateCollectionsResponse:
+    """List all available Weaviate collections"""
+    try:
+        collections = client.list_collections()
+        return WeaviateCollectionsResponse(collections=collections)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list collections: {str(e)}")
+
+@app.get("/weaviate_collection_info/{collection_name}")
+async def get_weaviate_collection_info(
+        collection_name: str,
+        client: WeaviateClient = Depends(get_weaviate_client)
+):
+    """Get information about a specific Weaviate collection"""
+    try:
+        info = client.get_collection_info(collection_name)
+        return info
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get collection info: {str(e)}")
+
+@app.get(
+    "/available_methods",
+    response_model=AvailableMethodsResponse
+)
+async def get_available_methods() -> AvailableMethodsResponse:
+    """Get list of available dimensionality reduction methods"""
+    return AvailableMethodsResponse(
+        available_methods=DRFactory.get_available_methods(),
+        all_methods=[method.value for method in DRMethod]
+    )
+
+@app.get(
+    "/",
+    response_model=RootResponse
+)
+async def read_root() -> RootResponse:
+    return RootResponse(status="Multi-Algorithm Dimensionality Reduction API with Weaviate is running")
+
+# Helper functions
+def _apply_dimensionality_reduction(X_data, apply_dr, dr_method, n_components, *args):
+    """Apply dimensionality reduction to data"""
+    if not apply_dr:
+        return X_data, False, None, "None"
+
+    if len(X_data) <= 12:  # at least n = 12
+        raise HTTPException(status_code=400, detail="Database must at least include 12 entries")
+
+    if n_components < 1:
+        raise HTTPException(status_code=400, detail="n_components must be at least 1")
+    if n_components > X_data.shape[1]:
+        n_components = min(n_components, X_data.shape[1])
+        print(f"Warning: n_components reduced to {n_components} as it exceeded input dimensions.")
+
+    available_methods = DRFactory.get_available_methods()
+    if dr_method.value not in available_methods:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Method {dr_method.value} is not available. Available methods: {available_methods}"
+        )
+
+    try:
+        # Unpack parameters
+        (pacmap_n_neighbors, pacmap_mn_ratio, pacmap_fp_ratio,
+         umap_n_neighbors, umap_min_dist, umap_metric,
+         trimap_n_inliers, trimap_n_outliers, trimap_n_random, verbose) = args
+
+        kwargs = {"verbose": verbose}
+
+        if dr_method == DRMethod.PACMAP:
+            kwargs.update({
+                "n_neighbors": pacmap_n_neighbors,
+                "MN_ratio": pacmap_mn_ratio,
+                "FP_ratio": pacmap_fp_ratio,
+                "apply_pca": True,
+                "init": "pca"
+            })
+        elif dr_method == DRMethod.UMAP:
+            kwargs.update({
+                "n_neighbors": umap_n_neighbors,
+                "min_dist": umap_min_dist,
+                "metric": umap_metric
+            })
+        elif dr_method == DRMethod.TRIMAP:
+            kwargs.update({
+                "n_inliers": trimap_n_inliers,
+                "n_outliers": trimap_n_outliers,
+                "n_random": trimap_n_random
+            })
+
+        reducer = DRFactory.create_reducer(dr_method, n_components=n_components, **kwargs)
+        method_name = reducer.name
+
+        start_time = time.time()
+        X_transformed = reducer.fit_transform(X_data)
+        end_time = time.time()
+        print(f"{method_name} finished in {end_time - start_time:.2f} seconds.")
+
+        return X_transformed, True, None, method_name
+
+    except Exception as e:
+        print(f"\nAn error occurred during {dr_method.value} execution: {e}")
+        return X_data, False, str(e), "None"
+
+def _get_response_message(dr_applied, dr_error, method_name, dr_method, n_components):
+    """Get appropriate response message"""
+    if dr_error:
+        return f"{dr_method.value} failed: {dr_error}. Returning original data."
+    elif dr_applied:
+        return f"{method_name} applied successfully, returning {n_components}-component embedding."
+    else:
+        return "Original data returned."
+
+def _create_collection():
+    # Use the global weaviate_client instance that is initialized in the lifespan
+    global weaviate_client
+    if not weaviate_client or not weaviate_client.client: # Ensure the underlying client is also available
+        print("Error: Weaviate client not properly initialized in _create_collection.")
+        return
+
+    collection_name = "Malware1"
+
+    # 1. Check if the collection already exists
+    if weaviate_client.client.collections.exists(collection_name):
+        print(f"Collection '{collection_name}' already exists. Skipping creation.")
+        # Optionally, you might want to verify if the existing schema matches
+        # what you expect and update/recreate if necessary, but for now,
+        # we'll just skip if it exists.
+        return
+
+    # 2. If not, create it
+    print(f"Collection '{collection_name}' does not exist. Creating now...")
+    try:
+        weaviate_client.client.collections.create(
+            name=collection_name, # Use 'name=' argument
+            vectorizer_config=[ # Corrected from vectorizer_config
+                Configure.NamedVectors.text2vec_huggingface(
+                    name="opcode_vector",
+                    source_properties=["op_code"],
+                    endpoint_url=AnyHttpUrl("http://huggingface:80/")
+                )
+            ],
+            properties=[
+                Property(name="op_code", data_type=DataType.TEXT),
+                Property(name="sha256_hash", data_type=DataType.TEXT, skip_vectorization=True),
+                Property(name="sha3_384_hash", data_type=DataType.TEXT, skip_vectorization=True),
+                Property(name="sha1_hash", data_type=DataType.TEXT, skip_vectorization=True),
+                Property(name="md5_hash", data_type=DataType.TEXT, skip_vectorization=True),
+                Property(name="first_seen", data_type=DataType.TEXT, skip_vectorization=True), # Consider DataType.DATE
+                Property(name="last_seen", data_type=DataType.TEXT, skip_vectorization=True),  # Consider DataType.DATE
+                Property(name="file_name", data_type=DataType.TEXT, skip_vectorization=True),
+                Property(name="file_size", data_type=DataType.INT, skip_vectorization=True),
+                Property(name="file_type_mime", data_type=DataType.TEXT, skip_vectorization=True),
+                Property(name="file_type", data_type=DataType.TEXT, skip_vectorization=True),
+                Property(name="reporter", data_type=DataType.TEXT, skip_vectorization=True),
+                Property(name="tags", data_type=DataType.TEXT_ARRAY, skip_vectorization=True),
+                Property(name="malware_family", data_type=DataType.TEXT, skip_vectorization=True),
+                Property(name="threat_actor", data_type=DataType.TEXT, skip_vectorization=True),
+                Property(name="contacted_domains", data_type=DataType.TEXT_ARRAY, skip_vectorization=True),
+                Property(name="strings_extracted", data_type=DataType.TEXT_ARRAY, skip_vectorization=True),
+            ]
+        )
+        print(f"Collection '{collection_name}' created successfully.")
+    except Exception as e:
+        print(f"Error creating collection '{collection_name}': {e}")
+
