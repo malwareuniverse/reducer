@@ -1,4 +1,4 @@
- fastapi>=0.95.0
+fastapi>=0.95.0
 uvicorn>=0.22.0
 numpy>=1.23.0
 pacmap>=0.7.0
@@ -8,3 +8,6 @@ weaviate-client~=4.14.4
 umap-learn~=0.5.7
 trimap~=1.1.4
 python-dotenv~=1.1.0
+scikit-learn~=1.7.1
+hdbscan
+scikit-learn

@@ -1,13 +1,15 @@
-from os import getenv
+import os
 from traceback import print_exc
 from typing import Tuple, List, Dict, Any, Optional
 
-# third party imports
 import weaviate
+from dotenv import load_dotenv
 from weaviate.collections.classes.config import Configure, Property, DataType
 from pydantic import AnyHttpUrl
 import numpy as np
 from fastapi import HTTPException
+
+load_dotenv()
 
 """Wrapper for Weaviate Client. Helps forward Weaviate errors to fastapi."""
 class WeaviateClient:
@@ -22,14 +24,16 @@ class WeaviateClient:
     def _setup_client(self):
         """Initialize Weaviate client"""
         try:
-            weaviate_host = getenv("WEAVIATE_HOST")
-            weaviate_http_port = getenv("WEAVIATE_HTTP_PORT")
+            weaviate_host = os.getenv("WEAVIATE_HOST")
+            weaviate_http_port = os.getenv("WEAVIATE_HTTP_PORT")
             if weaviate_host:
                 self.client = weaviate.connect_to_custom(
                     http_host=weaviate_host, http_port=int(weaviate_http_port), http_secure=True,
                     grpc_host=weaviate_host, grpc_port=50051, grpc_secure=False
                 )
+                print(weaviate_host)
             else:
+                print("test")
                 self.client = weaviate.connect_to_local(
                     port=self.port,
                     grpc_port=self.grpc_port,
@@ -157,12 +161,12 @@ class WeaviateClient:
     def _create_collection(self):
         # https://claude.ai/chat/da02dc99-323b-4112-9c3c-8a745177227e
         # Docker internes Netzwerk (weaviate muss das erreichen)
-        huggingface_url = getenv("HUGGINGFACE_URL_URL", "http://huggingface:80/")
-        clollection_name = getenv("COLLECTION_NAME", "Malware")
+        huggingface_url = os.getenv("HUGGINGFACE_URL_URL", "http://huggingface:80/")
+        collection_name = os.getenv("COLLECTION_NAME", "Malware")
 
         try:
             self.client.collections.create(
-                clollection_name,
+                collection_name,
                 vectorizer_config=[
                     Configure.NamedVectors.text2vec_huggingface(
                         name="opcode_vector",

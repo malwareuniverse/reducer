@@ -32,7 +32,6 @@ class MalwareData:
     strings_extracted: Optional[List[str]] = None
 
 
-
 client = weaviate.connect_to_local(port=5000, grpc_port=50051)
 client.collections.delete("Malware")
 client.collections.delete("Malware1")

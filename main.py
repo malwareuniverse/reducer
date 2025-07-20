@@ -1,12 +1,7 @@
-
 from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any
-from pydantic import AnyHttpUrl
 
 import time
-
-from weaviate.collections.classes.config import Configure, Property, DataType
-
 
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
@@ -16,29 +11,43 @@ import numpy as np
 from dimensionality_reducer import DRMethod, DRFactory
 from weaviate_client import WeaviateClient
 
+from clusterer import ClusterMethod, ClusterFactory
+
 N_samples = 1024
 D_dimensions = 1024
 
 weaviate_client = None
 
 # Pydantic Response Models
+class WeaviateResult(BaseModel):
+    """Represents a single data point with its transformed embedding and original metadata."""
+    embedding: List[float]
+    metadata: Dict[str, Any]
+
 class BaseDataResponse(BaseModel):
+    """Base response containing fields common to all data-returning endpoints."""
     shape: List[int]
     method_applied: str
     dr_applied: bool
-    data: List[List[float]]
     message: str
 
 class GenerateDataResponse(BaseDataResponse):
+    """Response for randomly generated data."""
+    data: List[List[float]]
     data_source: str = "random"
 
 class QueryWeaviateResponse(BaseDataResponse):
     data_source: str = "weaviate"
     collection_name: str
     original_vector_count: int
-    metadata: List[Dict[str, Any]]
     query: str
+    clustering_applied: bool
+    clustering_method_applied: Optional[str] = None
+    results: List[WeaviateResult]
 
+class AvailableClusteringMethodsResponse(BaseModel):
+    available_methods: List[str]
+    all_methods: List[str]
 class WeaviateCollectionsResponse(BaseModel):
     collections: List[str]
 
@@ -53,7 +62,6 @@ class RootResponse(BaseModel):
 async def lifespan(fastapi_app: FastAPI):
     global weaviate_client
     weaviate_client = WeaviateClient(port=5000, grpc_port=50051)
-    _create_collection()
     yield
     print(weaviate_client)
     if weaviate_client:
@@ -127,72 +135,111 @@ async def generate_and_transform_data(
         message=message
     )
 
+
+# In main.py, replace the entire `/query_weaviate` endpoint function with this updated version:
+
 @app.get(
     "/query_weaviate",
     response_model=QueryWeaviateResponse,
-    summary="Query Weaviate and apply dimensionality reduction",
-    response_description="A JSON object containing Weaviate data with optional DR embedding."
+    summary="Query Weaviate, apply clustering, and apply dimensionality reduction",
+    response_description="A JSON object containing Weaviate data with optional clustering and DR."
 )
 async def query_and_transform_weaviate_data(
+        # Weaviate Query Parameters
         collection_name: str,
         query: str = "",
         limit: int = 100,
         vector_field: Optional[str] = None,
+        # Clustering Parameters
+        apply_clustering: bool = True,
+        cluster_method: ClusterMethod = ClusterMethod.HDBSCAN,
+        hdbscan_min_cluster_size: int = 5,
+        hdbscan_min_samples: Optional[int] = None,
+        hdbscan_metric: str = "euclidean",
+        # Dimensionality Reduction Parameters
         apply_dr: bool = True,
         dr_method: DRMethod = DRMethod.PACMAP,
         n_components: int = 3,
+        # PaCMAP Parameters
         pacmap_n_neighbors: int = 10,
         pacmap_mn_ratio: float = 0.5,
         pacmap_fp_ratio: float = 2.0,
+        # UMAP Parameters
         umap_n_neighbors: int = 15,
         umap_min_dist: float = 0.1,
         umap_metric: str = "euclidean",
+        # TriMAP Parameters
         trimap_n_inliers: int = 10,
         trimap_n_outliers: int = 5,
         trimap_n_random: int = 5,
-        verbose: bool = True,
+        # General
+        verbose: bool = False,
         client: WeaviateClient = Depends(get_weaviate_client)
 ) -> QueryWeaviateResponse:
-    """Query Weaviate for vectors and optionally apply dimensionality reduction."""
+    """
+    Query Weaviate for vectors, then optionally apply clustering and/or dimensionality reduction.
 
-    # Get data from Weaviate using the injected client
+    - **Clustering** is performed on the original high-dimensional vectors.
+    - **Dimensionality Reduction** is also performed on the original vectors.
+    """
+
     X_weaviate_data, metadata = client.query_vectors(
         collection_name=collection_name,
         query=query,
         limit=limit,
         vector_field=vector_field
     )
-    print(apply_dr)
-    # If apply_dr is False, return original vectors without DR
-    if not apply_dr:
-        data_to_return = X_weaviate_data
-        dr_applied_result = False
-        dr_error = None
-        method_name = "None"
-    else:
-        # Apply dimensionality reduction
-        data_to_return, dr_applied_result, dr_error, method_name = _apply_dimensionality_reduction(
-            X_weaviate_data, apply_dr, dr_method, n_components,
-            pacmap_n_neighbors, pacmap_mn_ratio, pacmap_fp_ratio,
-            umap_n_neighbors, umap_min_dist, umap_metric,
-            trimap_n_inliers, trimap_n_outliers, trimap_n_random,
-            verbose
-        )
 
-    result_list = data_to_return.tolist()
-    message = _get_response_message(dr_applied_result, dr_error, method_name, dr_method, n_components)
+    cluster_labels, clustering_applied, clustering_error, clustering_method_name = _apply_clustering(
+        X_weaviate_data, apply_clustering, cluster_method,
+        hdbscan_min_cluster_size, hdbscan_min_samples, hdbscan_metric, verbose
+    )
+
+    reduced_embeddings, dr_applied, dr_error, dr_method_name = _apply_dimensionality_reduction(
+        X_weaviate_data, apply_dr, dr_method, n_components,
+        pacmap_n_neighbors, pacmap_mn_ratio, pacmap_fp_ratio,
+        umap_n_neighbors, umap_min_dist, umap_metric,
+        trimap_n_inliers, trimap_n_outliers, trimap_n_random,
+        verbose
+    )
+
+    # --- STEP 3: COMBINE RESULTS ---
+    if clustering_applied and cluster_labels is not None:
+        for i, meta in enumerate(metadata):
+            meta['cluster_label'] = int(cluster_labels[i])
+
+    result_points = reduced_embeddings.tolist()
+    combined_results = [
+        WeaviateResult(embedding=point, metadata=meta)
+        for point, meta in zip(result_points, metadata)
+    ]
+
+    dr_message = _get_response_message(dr_applied, dr_error, dr_method_name, dr_method, n_components)
+
+    cluster_message = ""
+    if not apply_clustering:
+        cluster_message = "Clustering not applied. "
+    elif clustering_error:
+        cluster_message = f"{cluster_method.value} clustering failed: {clustering_error}. "
+    elif clustering_applied and cluster_labels is not None:
+        num_clusters = len(np.unique(cluster_labels[cluster_labels != -1]))
+        num_noise = np.sum(cluster_labels == -1)
+        cluster_message = f"{clustering_method_name} found {num_clusters} clusters and {num_noise} noise points. "
+
+    final_message = cluster_message + dr_message
 
     return QueryWeaviateResponse(
-        shape=list(data_to_return.shape),
-        method_applied=method_name,
-        dr_applied=dr_applied_result,
-        data=result_list,
+        shape=list(reduced_embeddings.shape),
+        method_applied=dr_method_name,
+        dr_applied=dr_applied,
+        clustering_applied=clustering_applied,
+        clustering_method_applied=clustering_method_name if clustering_applied else None,
+        results=combined_results,
         data_source="weaviate",
         collection_name=collection_name,
         query=query,
         original_vector_count=len(metadata),
-        metadata=metadata[:10] if len(metadata) > 10 else metadata,
-        message=message
+        message=final_message
     )
 
 @app.get(
@@ -205,6 +252,7 @@ async def list_weaviate_collections(
     """List all available Weaviate collections"""
     try:
         collections = client.list_collections()
+        print(collections)
         return WeaviateCollectionsResponse(collections=collections)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list collections: {str(e)}")
@@ -220,6 +268,21 @@ async def get_weaviate_collection_info(
         return info
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get collection info: {str(e)}")
+
+@app.get(
+    "/available_clustering_methods",
+    response_model=AvailableClusteringMethodsResponse,
+    summary="List available clustering algorithms"
+)
+async def get_available_clustering_methods() -> AvailableClusteringMethodsResponse:
+    return AvailableClusteringMethodsResponse(
+        available_methods=ClusterFactory.get_available_methods(),
+        all_methods=[method.value for method in ClusterMethod]
+    )
+
+@app.get("/", response_model=RootResponse)
+async def read_root() -> RootResponse:
+    return RootResponse(status="Multi-Algorithm DR & Clustering API with Weaviate is running")
 
 @app.get(
     "/available_methods",
@@ -262,7 +325,6 @@ def _apply_dimensionality_reduction(X_data, apply_dr, dr_method, n_components, *
         )
 
     try:
-        # Unpack parameters
         (pacmap_n_neighbors, pacmap_mn_ratio, pacmap_fp_ratio,
          umap_n_neighbors, umap_min_dist, umap_metric,
          trimap_n_inliers, trimap_n_outliers, trimap_n_random, verbose) = args
@@ -313,56 +375,47 @@ def _get_response_message(dr_applied, dr_error, method_name, dr_method, n_compon
     else:
         return "Original data returned."
 
-def _create_collection():
-    # Use the global weaviate_client instance that is initialized in the lifespan
-    global weaviate_client
-    if not weaviate_client or not weaviate_client.client: # Ensure the underlying client is also available
-        print("Error: Weaviate client not properly initialized in _create_collection.")
-        return
 
-    collection_name = "Malware1"
+def _apply_clustering(X_data, apply_clustering, cluster_method, *args):
+    """Apply clustering to high-dimensional data."""
+    if not apply_clustering:
+        return None, False, None, "None"
 
-    # 1. Check if the collection already exists
-    if weaviate_client.client.collections.exists(collection_name):
-        print(f"Collection '{collection_name}' already exists. Skipping creation.")
-        # Optionally, you might want to verify if the existing schema matches
-        # what you expect and update/recreate if necessary, but for now,
-        # we'll just skip if it exists.
-        return
+    # Unpack args
+    (hdbscan_min_cluster_size, hdbscan_min_samples, hdbscan_metric, verbose) = args
 
-    # 2. If not, create it
-    print(f"Collection '{collection_name}' does not exist. Creating now...")
-    try:
-        weaviate_client.client.collections.create(
-            name=collection_name, # Use 'name=' argument
-            vectorizer_config=[ # Corrected from vectorizer_config
-                Configure.NamedVectors.text2vec_huggingface(
-                    name="opcode_vector",
-                    source_properties=["op_code"],
-                    endpoint_url=AnyHttpUrl("http://huggingface:80/")
-                )
-            ],
-            properties=[
-                Property(name="op_code", data_type=DataType.TEXT),
-                Property(name="sha256_hash", data_type=DataType.TEXT, skip_vectorization=True),
-                Property(name="sha3_384_hash", data_type=DataType.TEXT, skip_vectorization=True),
-                Property(name="sha1_hash", data_type=DataType.TEXT, skip_vectorization=True),
-                Property(name="md5_hash", data_type=DataType.TEXT, skip_vectorization=True),
-                Property(name="first_seen", data_type=DataType.TEXT, skip_vectorization=True), # Consider DataType.DATE
-                Property(name="last_seen", data_type=DataType.TEXT, skip_vectorization=True),  # Consider DataType.DATE
-                Property(name="file_name", data_type=DataType.TEXT, skip_vectorization=True),
-                Property(name="file_size", data_type=DataType.INT, skip_vectorization=True),
-                Property(name="file_type_mime", data_type=DataType.TEXT, skip_vectorization=True),
-                Property(name="file_type", data_type=DataType.TEXT, skip_vectorization=True),
-                Property(name="reporter", data_type=DataType.TEXT, skip_vectorization=True),
-                Property(name="tags", data_type=DataType.TEXT_ARRAY, skip_vectorization=True),
-                Property(name="malware_family", data_type=DataType.TEXT, skip_vectorization=True),
-                Property(name="threat_actor", data_type=DataType.TEXT, skip_vectorization=True),
-                Property(name="contacted_domains", data_type=DataType.TEXT_ARRAY, skip_vectorization=True),
-                Property(name="strings_extracted", data_type=DataType.TEXT_ARRAY, skip_vectorization=True),
-            ]
+    if len(X_data) < hdbscan_min_cluster_size:
+        error_msg = f"Not enough data points ({len(X_data)}) to cluster. HDBSCAN requires at least 'min_cluster_size' points ({hdbscan_min_cluster_size})."
+        return None, False, error_msg, "None"
+
+    available_methods = ClusterFactory.get_available_methods()
+    if cluster_method.value not in available_methods:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Clustering method {cluster_method.value} is not available. Available: {available_methods}"
         )
-        print(f"Collection '{collection_name}' created successfully.")
-    except Exception as e:
-        print(f"Error creating collection '{collection_name}': {e}")
 
+    try:
+        kwargs = {}
+        if cluster_method == ClusterMethod.HDBSCAN:
+            kwargs.update({
+                "min_cluster_size": hdbscan_min_cluster_size,
+                "min_samples": hdbscan_min_samples,
+                "metric": hdbscan_metric,
+            })
+
+        clusterer = ClusterFactory.create_clusterer(cluster_method, **kwargs)
+        method_name = clusterer.name
+
+        start_time = time.time()
+        print(f"Starting clustering with {method_name}...")
+        labels = clusterer.fit_predict(X_data)
+        end_time = time.time()
+        print(f"Clustering with {method_name} finished in {end_time - start_time:.2f} seconds.")
+
+        return labels, True, None, method_name
+
+    except Exception as e:
+        error_str = f"An error occurred during {cluster_method.value} clustering: {e}"
+        print(f"\n{error_str}")
+        return None, False, str(e), "None"
