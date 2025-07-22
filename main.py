@@ -61,7 +61,7 @@ class RootResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI):
     global weaviate_client
-    weaviate_client = WeaviateClient(port=5000, grpc_port=50051)
+    weaviate_client = WeaviateClient()
     yield
     print(weaviate_client)
     if weaviate_client:
@@ -274,7 +274,7 @@ async def get_available_clustering_methods() -> AvailableClusteringMethodsRespon
 
 @app.get("/", response_model=RootResponse)
 async def read_root() -> RootResponse:
-    return RootResponse(status="Multi-Algorithm DR & Clustering API with Weaviate is running")
+    return RootResponse(status="Multi-Algorithm Dimensionality Reduction & Clustering API with Weaviate is running")
 
 @app.get(
     "/available_methods",
@@ -286,13 +286,6 @@ async def get_available_methods() -> AvailableMethodsResponse:
         available_methods=DRFactory.get_available_methods(),
         all_methods=[method.value for method in DRMethod]
     )
-
-@app.get(
-    "/",
-    response_model=RootResponse
-)
-async def read_root() -> RootResponse:
-    return RootResponse(status="Multi-Algorithm Dimensionality Reduction API with Weaviate is running")
 
 # Helper functions
 def _apply_dimensionality_reduction(X_data, apply_dr, dr_method, n_components, *args):
