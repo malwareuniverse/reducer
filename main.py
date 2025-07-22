@@ -61,7 +61,7 @@ class RootResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI):
     global weaviate_client
-    weaviate_client = WeaviateClient()
+    weaviate_client = WeaviateClient(port=5000, grpc_port=50051)
     yield
     print(weaviate_client)
     if weaviate_client:
@@ -73,14 +73,12 @@ def get_weaviate_client() -> Optional[WeaviateClient]:
         raise HTTPException(status_code=500, detail="Weaviate client not initialized")
     return weaviate_client
 
-# FastAPI app with lifespan
 app = FastAPI(
     title="Multi-Algorithm Dimensionality Reduction API with Weaviate",
     description=f"Generates random data or queries Weaviate, then applies various DR algorithms.",
     version="2.1.0",
     lifespan=lifespan
 )
-
 
 @app.get(
     "/generate_data",
@@ -182,14 +180,15 @@ async def query_and_transform_weaviate_data(
     - **Clustering** is performed on the original high-dimensional vectors.
     - **Dimensionality Reduction** is also performed on the original vectors.
     """
-
+    print(collection_name)
     X_weaviate_data, metadata = client.query_vectors(
         collection_name=collection_name,
         query=query,
         limit=limit,
         vector_field=vector_field
     )
-
+    print(X_weaviate_data)
+    print(metadata)
     cluster_labels, clustering_applied, clustering_error, clustering_method_name = _apply_clustering(
         X_weaviate_data, apply_clustering, cluster_method,
         hdbscan_min_cluster_size, hdbscan_min_samples, hdbscan_metric, verbose
@@ -203,7 +202,6 @@ async def query_and_transform_weaviate_data(
         verbose
     )
 
-    # --- STEP 3: COMBINE RESULTS ---
     if clustering_applied and cluster_labels is not None:
         for i, meta in enumerate(metadata):
             meta['cluster_label'] = int(cluster_labels[i])
@@ -242,6 +240,7 @@ async def query_and_transform_weaviate_data(
         message=final_message
     )
 
+
 @app.get(
     "/weaviate_collections",
     response_model=WeaviateCollectionsResponse
@@ -249,13 +248,13 @@ async def query_and_transform_weaviate_data(
 async def list_weaviate_collections(
         client: WeaviateClient = Depends(get_weaviate_client)
 ) -> WeaviateCollectionsResponse:
-    """List all available Weaviate collections"""
     try:
-        collections = client.list_collections()
-        print(collections)
-        return WeaviateCollectionsResponse(collections=collections)
+        collections_dict = client.list_collections()
+        collection_names = list(collections_dict.keys())
+        return WeaviateCollectionsResponse(collections=collection_names)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list collections: {str(e)}")
+
 
 @app.get("/weaviate_collection_info/{collection_name}")
 async def get_weaviate_collection_info(
@@ -282,7 +281,7 @@ async def get_available_clustering_methods() -> AvailableClusteringMethodsRespon
 
 @app.get("/", response_model=RootResponse)
 async def read_root() -> RootResponse:
-    return RootResponse(status="Multi-Algorithm Dimensionality Reduction & Clustering API with Weaviate is running")
+    return RootResponse(status="Multi-Algorithm DR & Clustering API with Weaviate is running")
 
 @app.get(
     "/available_methods",
@@ -294,6 +293,13 @@ async def get_available_methods() -> AvailableMethodsResponse:
         available_methods=DRFactory.get_available_methods(),
         all_methods=[method.value for method in DRMethod]
     )
+
+@app.get(
+    "/",
+    response_model=RootResponse
+)
+async def read_root() -> RootResponse:
+    return RootResponse(status="Multi-Algorithm Dimensionality Reduction API with Weaviate is running")
 
 # Helper functions
 def _apply_dimensionality_reduction(X_data, apply_dr, dr_method, n_components, *args):

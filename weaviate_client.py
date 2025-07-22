@@ -1,11 +1,10 @@
-from os import getenv
+import os
 from traceback import print_exc
 from typing import Tuple, List, Dict, Any, Optional
 
-# Third party libraries
-from weaviate import connect_to_custom, connect_to_local
-from weaviate.collections.classes.config import Configure, Property, DataType
+import weaviate
 from dotenv import load_dotenv
+from weaviate.collections.classes.config import Configure, Property, DataType
 from pydantic import AnyHttpUrl
 import numpy as np
 from fastapi import HTTPException
@@ -15,7 +14,9 @@ load_dotenv()
 """Wrapper for Weaviate Client. Helps forward Weaviate errors to fastapi."""
 class WeaviateClient:
 
-    def __init__(self):
+    def __init__(self, port: int = 5000, grpc_port: int = 50051):
+        self.port = port
+        self.grpc_port = grpc_port
         self.client = None
         self._setup_client()
         self._create_collection()
@@ -23,27 +24,22 @@ class WeaviateClient:
     def _setup_client(self):
         """Initialize Weaviate client"""
         try:
-            weaviate_host = getenv("WEAVIATE_HOST")
-            weaviate_http_port = getenv("WEAVIATE_HTTP_PORT", 5000)
-            weaviate_http_secure = getenv("WEAVIATE_HTTP_SECURE", True)
-            weaviate_grpc_port = getenv("WEAVIATE_GRPC_PORT", 50051)
-            weaviate_grpc_secure = getenv("WEAVIATE_GRPC_SECURE", False)
-
+            weaviate_host = os.getenv("WEAVIATE_HOST")
+            weaviate_http_port = os.getenv("WEAVIATE_HTTP_PORT")
             if weaviate_host:
-                self.client = connect_to_custom(
-                    http_host=weaviate_host, http_port=int(weaviate_http_port), http_secure=bool(weaviate_http_secure),
-                    grpc_host=weaviate_host, grpc_port=int(weaviate_grpc_port), grpc_secure=bool(weaviate_grpc_secure)
+                self.client = weaviate.connect_to_custom(
+                    http_host=weaviate_host, http_port=int(weaviate_http_port), http_secure=True,
+                    grpc_host=weaviate_host, grpc_port=50051, grpc_secure=False
                 )
-                
-                print(f"[ INFO ]: Connected to {weaviate_host} on HTTP-Port: {weaviate_http_port} GRPC-Port: {weaviate_grpc_port}")
+                print(weaviate_host)
             else:
-                self.client = connect_to_local(
-                    port=weaviate_http_port,
-                    grpc_port=weaviate_grpc_port,
+                print("test")
+                self.client = weaviate.connect_to_local(
+                    port=self.port,
+                    grpc_port=self.grpc_port,
                 )
-                print(f"[ INFO ]: Connect to local weviate on HTTP-Port: {weaviate_http_port} GRPC-Port: {weaviate_grpc_port}")
-        
         except Exception as e:
+            print(e)
             raise ConnectionError(f"Failed to connect to Weaviate: {str(e)}")
 
     def query_vectors(self, collection_name: str, query: str, limit: int = 100,
@@ -71,6 +67,7 @@ class WeaviateClient:
                 include_vector=True
             )
 
+            print(response)
             vectors = []
             metadata = []
 
@@ -105,19 +102,17 @@ class WeaviateClient:
         if vector_field and vector_field in vector_dict:
             return vector_dict[vector_field]
 
-        # Auto-detect vector field
         common_fields = ['title_vector', 'default', 'vector', 'embedding']
         for field in common_fields:
             if field in vector_dict:
                 return vector_dict[field]
 
-        # Return first available vector if no common field found
         if vector_dict:
             return list(vector_dict.values())[0]
 
         return None
 
-    def list_collections(self) -> List[str]:
+    def list_collections(self) -> dict:
         """List all available collections"""
         if not self.client:
             raise HTTPException(status_code=500, detail="Weaviate client not initialized")
@@ -130,13 +125,11 @@ class WeaviateClient:
             raise HTTPException(status_code=500, detail=f"Failed to list collections: {str(e)}")
 
     def get_collection_info(self, collection_name: str) -> Dict[str, Any]:
-        """Get information about a specific collection"""
         if not self.client:
             raise HTTPException(status_code=500, detail="Weaviate client not initialized")
 
         try:
             collection = self.client.collections.get(collection_name)
-            # Get a sample object to understand the schema
             sample = collection.query.fetch_objects(limit=1, include_vector=True)
 
             info = {
@@ -165,8 +158,8 @@ class WeaviateClient:
     def _create_collection(self):
         # https://claude.ai/chat/da02dc99-323b-4112-9c3c-8a745177227e
         # Docker internes Netzwerk (weaviate muss das erreichen)
-        huggingface_url = getenv("HUGGINGFACE_URL_URL", "http://huggingface:80/")
-        collection_name = getenv("COLLECTION_NAME", "Malware")
+        huggingface_url = os.getenv("HUGGINGFACE_URL_URL", "http://huggingface:80/")
+        collection_name = os.getenv("COLLECTION_NAME", "Malware")
 
         try:
             self.client.collections.create(
@@ -214,6 +207,6 @@ class WeaviateClient:
         self.close()
 
 
-def create_weaviate_client() -> WeaviateClient:
+def create_weaviate_client(port: int = 5000, grpc_port: int = 50051) -> WeaviateClient:
     """Create a new Weaviate client instance"""
-    return WeaviateClient()
+    return WeaviateClient(port=port, grpc_port=grpc_port)
