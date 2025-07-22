@@ -175,15 +175,13 @@ async def query_and_transform_weaviate_data(
     - **Clustering** is performed on the original high-dimensional vectors.
     - **Dimensionality Reduction** is also performed on the original vectors.
     """
-    print(collection_name)
     X_weaviate_data, metadata = client.query_vectors(
         collection_name=collection_name,
         query=query,
         limit=limit,
         vector_field=vector_field
     )
-    print(X_weaviate_data)
-    print(metadata)
+
     cluster_labels, clustering_applied, clustering_error, clustering_method_name = _apply_clustering(
         X_weaviate_data, apply_clustering, cluster_method,
         hdbscan_min_cluster_size, hdbscan_min_samples, hdbscan_metric, verbose
@@ -375,7 +373,6 @@ def _apply_clustering(X_data, apply_clustering, cluster_method, *args):
     if not apply_clustering:
         return None, False, None, "None"
 
-    # Unpack args
     (hdbscan_min_cluster_size, hdbscan_min_samples, hdbscan_metric, verbose) = args
 
     if len(X_data) < hdbscan_min_cluster_size:

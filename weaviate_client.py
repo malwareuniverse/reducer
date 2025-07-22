@@ -67,7 +67,6 @@ class WeaviateClient:
                 include_vector=True
             )
 
-            print(response)
             vectors = []
             metadata = []
 
