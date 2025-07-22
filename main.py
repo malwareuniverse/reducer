@@ -67,7 +67,6 @@ async def lifespan(fastapi_app: FastAPI):
     if weaviate_client:
         weaviate_client.close()
 
-# Dependency function
 def get_weaviate_client() -> Optional[WeaviateClient]:
     if weaviate_client is None:
         raise HTTPException(status_code=500, detail="Weaviate client not initialized")
@@ -105,14 +104,12 @@ async def generate_and_transform_data(
 
     X_test_data = np.random.randn(N_samples, D_dimensions)
 
-    # If apply_dr is False, return original data without DR
     if not apply_dr:
         data_to_return = X_test_data
         dr_applied_result = False
         dr_error = None
         method_name = "None"
     else:
-        # Apply dimensionality reduction
         data_to_return, dr_applied_result, dr_error, method_name = _apply_dimensionality_reduction(
             X_test_data, apply_dr, dr_method, n_components,
             pacmap_n_neighbors, pacmap_mn_ratio, pacmap_fp_ratio,
@@ -133,8 +130,6 @@ async def generate_and_transform_data(
         message=message
     )
 
-
-# In main.py, replace the entire `/query_weaviate` endpoint function with this updated version:
 
 @app.get(
     "/query_weaviate",
@@ -307,7 +302,7 @@ def _apply_dimensionality_reduction(X_data, apply_dr, dr_method, n_components, *
     if not apply_dr:
         return X_data, False, None, "None"
 
-    if len(X_data) <= 12:  # at least n = 12
+    if len(X_data) <= 12:
         raise HTTPException(status_code=400, detail="Database must at least include 12 entries")
 
     if n_components < 1:
