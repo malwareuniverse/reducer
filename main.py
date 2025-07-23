@@ -13,9 +13,11 @@ from weaviate_client import WeaviateClient
 
 from clusterer import ClusterMethod, ClusterFactory
 
+# For random generation --> testing
 N_samples = 1024
 D_dimensions = 1024
 
+# global - client
 weaviate_client = None
 
 # Pydantic Response Models
@@ -63,7 +65,6 @@ async def lifespan(fastapi_app: FastAPI):
     global weaviate_client
     weaviate_client = WeaviateClient(port=5000, grpc_port=50051)
     yield
-    print(weaviate_client)
     if weaviate_client:
         weaviate_client.close()
 
@@ -358,6 +359,7 @@ def _apply_dimensionality_reduction(X_data, apply_dr, dr_method, n_components, *
         print(f"\nAn error occurred during {dr_method.value} execution: {e}")
         return X_data, False, str(e), "None"
 
+# Helper functions
 def _get_response_message(dr_applied, dr_error, method_name, dr_method, n_components):
     """Get appropriate response message"""
     if dr_error:

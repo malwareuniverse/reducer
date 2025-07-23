@@ -19,7 +19,7 @@ class WeaviateClient:
         self.grpc_port = grpc_port
         self.client = None
         self._setup_client()
-        self._create_collection()
+        # self._create_collection() --> removing auto-creation; no need anymore
 
     def _setup_client(self):
         """Initialize Weaviate client"""
@@ -31,9 +31,7 @@ class WeaviateClient:
                     http_host=weaviate_host, http_port=int(weaviate_http_port), http_secure=True,
                     grpc_host=weaviate_host, grpc_port=50051, grpc_secure=False
                 )
-                print(weaviate_host)
             else:
-                print("test")
                 self.client = weaviate.connect_to_local(
                     port=self.port,
                     grpc_port=self.grpc_port,
@@ -42,7 +40,7 @@ class WeaviateClient:
             print(e)
             raise ConnectionError(f"Failed to connect to Weaviate: {str(e)}")
 
-    def query_vectors(self, collection_name: str, query: str, limit: int = 100,
+    def query_vectors(self, collection_name: str, query: str, limit: Optional[int] = None,
                       vector_field: Optional[str] = None) -> Tuple[np.ndarray, List[Dict[str, Any]]]:
         """
         Query Weaviate and return vectors and metadata
@@ -66,14 +64,11 @@ class WeaviateClient:
                 limit=limit,
                 include_vector=True
             )
-
             vectors = []
             metadata = []
-
             for obj in response.objects:
                 if hasattr(obj, 'vector') and obj.vector:
                     vector_data = self._extract_vector(obj.vector, vector_field)
-
                     if vector_data:
                         vectors.append(vector_data)
                         metadata.append({
@@ -155,9 +150,8 @@ class WeaviateClient:
             }
 
     def _create_collection(self):
-        # https://claude.ai/chat/da02dc99-323b-4112-9c3c-8a745177227e
-        # Docker internes Netzwerk (weaviate muss das erreichen)
-        huggingface_url = os.getenv("HUGGINGFACE_URL_URL", "http://huggingface:80/")
+        # for testing, set up .env if needed
+        huggingface_url = os.getenv("HUGGINGFACE_URL", "http://huggingface:80/")
         collection_name = os.getenv("COLLECTION_NAME", "Malware")
 
         try:

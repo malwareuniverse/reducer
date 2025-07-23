@@ -19,7 +19,7 @@ except ImportError:
 class ClusterMethod(str, Enum):
     """Enum for available clustering methods."""
     HDBSCAN = "hdbscan"
-    KMEANS = "kmeans"
+    KMEANS = "kmeans" # k-means added here, but can't be used. User would need to know k-cluster
 
 
 class BaseClusterer(ABC):
