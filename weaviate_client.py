@@ -1,15 +1,14 @@
-import os
+from os import getenv
 from traceback import print_exc
 from typing import Tuple, List, Dict, Any, Optional
 
-import weaviate
-from dotenv import load_dotenv
+from weaviate import connect_to_custom, connect_to_local
 from weaviate.collections.classes.config import Configure, Property, DataType
 from pydantic import AnyHttpUrl
 import numpy as np
 from fastapi import HTTPException
 
-load_dotenv()
+
 
 """Wrapper for Weaviate Client. Helps forward Weaviate errors to fastapi."""
 class WeaviateClient:
@@ -24,15 +23,20 @@ class WeaviateClient:
     def _setup_client(self):
         """Initialize Weaviate client"""
         try:
-            weaviate_host = os.getenv("WEAVIATE_HOST")
-            weaviate_http_port = os.getenv("WEAVIATE_HTTP_PORT")
+            weaviate_host = getenv("WEAVIATE_HOST")
+            weaviate_http_port = getenv("WEAVIATE_HTTP_PORT", 5000)
+            weaviate_http_secure = getenv("WEAVIATE_HTTP_SECURE", True)
+            weaviate_grpc_port = getenv("WEAVIATE_GRPC_PORT", 50051)
+            weaviate_grpc_secure = getenv("WEAVIATE_GRPC_SECURE", False)
+
+
             if weaviate_host:
-                self.client = weaviate.connect_to_custom(
-                    http_host=weaviate_host, http_port=int(weaviate_http_port), http_secure=True,
-                    grpc_host=weaviate_host, grpc_port=50051, grpc_secure=False
+                self.client = connect_to_custom(
+                    http_host=weaviate_host, http_port=int(weaviate_http_port), http_secure=bool(weaviate_http_secure),
+                    grpc_host=weaviate_host, grpc_port=int(weaviate_grpc_port), grpc_secure=bool(weaviate_grpc_secure)
                 )
             else:
-                self.client = weaviate.connect_to_local(
+                self.client = connect_to_local(
                     port=self.port,
                     grpc_port=self.grpc_port,
                 )
