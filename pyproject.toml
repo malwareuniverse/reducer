@@ -12,7 +12,7 @@ dependencies = [
     "weaviate-client==4.14.4",
     "pacmap==0.8.0",
     "umap-learn==0.5.7",
-    "trimap==1.1.4",
+    "trimap==1.1.5",
     "python-dotenv==1.1.1",
     "scikit-learn==1.7.1",
     "hdbscan==0.8.40",
@@ -45,3 +45,4 @@ ignore = [
     "W191",  # indentation contains tabs
     "B904",  # Allow raising exceptions without from e, for HTTPException
 ]
+
