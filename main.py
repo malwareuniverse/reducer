@@ -142,7 +142,7 @@ async def query_and_transform_weaviate_data(
         # Weaviate Query Parameters
         collection_name: str,
         query: str = "",
-        limit: int = 100,
+        limit: int = None,
         vector_field: Optional[str] = None,
         # Clustering Parameters
         apply_clustering: bool = True,
@@ -405,3 +405,4 @@ def _apply_clustering(X_data, apply_clustering, cluster_method, *args):
         error_str = f"An error occurred during {cluster_method.value} clustering: {e}"
         print(f"\n{error_str}")
         return None, False, str(e), "None"
+
