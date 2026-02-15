@@ -3,6 +3,7 @@ from typing import Optional, List, Dict, Any
 
 import time
 
+import uvicorn
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 import numpy as np
@@ -406,3 +407,5 @@ def _apply_clustering(X_data, apply_clustering, cluster_method, *args):
         print(f"\n{error_str}")
         return None, False, str(e), "None"
 
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8011, reload=True)

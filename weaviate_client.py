@@ -1,3 +1,4 @@
+import os
 from os import getenv
 from traceback import print_exc
 from typing import Tuple, List, Dict, Any, Optional
@@ -23,8 +24,8 @@ class WeaviateClient:
     def _setup_client(self):
         """Initialize Weaviate client"""
         try:
-            weaviate_host = getenv("WEAVIATE_HOST")
-            weaviate_http_port = getenv("WEAVIATE_HTTP_PORT", 5000)
+            weaviate_host = getenv("WEAVIATE_HOST", "weaviate.malwareuniverse.org")
+            weaviate_http_port = getenv("WEAVIATE_HTTP_PORT", 443)
             weaviate_http_secure = getenv("WEAVIATE_HTTP_SECURE", True)
             weaviate_grpc_port = getenv("WEAVIATE_GRPC_PORT", 50051)
             weaviate_grpc_secure = getenv("WEAVIATE_GRPC_SECURE", False)
@@ -46,46 +47,24 @@ class WeaviateClient:
 
     def query_vectors(self, collection_name: str, query: str, limit: Optional[int] = None,
                       vector_field: Optional[str] = None) -> Tuple[np.ndarray, List[Dict[str, Any]]]:
-        """
-        Query Weaviate and return vectors and metadata
-
-        Args:
-            collection_name: Name of the Weaviate collection
-            query: Search query string
-            limit: Maximum number of results
-            vector_field: Specific vector field name (auto-detect if None)
-
-        Returns:
-            tuple: (vectors as numpy array, list of metadata objects)
-        """
         if not self.client:
             raise HTTPException(status_code=500, detail="Weaviate client not initialized")
 
         try:
             collection = self.client.collections.get(collection_name)
-
-            response = collection.query.fetch_objects(
-                limit=limit,
-                include_vector=True
-            )
             vectors = []
             metadata = []
-            for obj in response.objects:
-                if hasattr(obj, 'vector') and obj.vector:
-                    vector_data = self._extract_vector(obj.vector, vector_field)
-                    if vector_data:
-                        vectors.append(vector_data)
-                        metadata.append({
-                            'uuid': str(obj.uuid),
-                            'properties': obj.properties,
-                            'vector_length': len(vector_data)
-                        })
+
+            if limit is None:
+                for obj in collection.iterator(include_vector=True):
+                    self._process_object(obj, vectors, metadata, vector_field)
+            else:
+                response = collection.query.fetch_objects(limit=limit, include_vector=True)
+                for obj in response.objects:
+                    self._process_object(obj, vectors, metadata, vector_field)
 
             if not vectors:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"No vectors found for query: '{query}' in collection: '{collection_name}'"
-                )
+                raise HTTPException(status_code=404, detail=f"No vectors found in collection: '{collection_name}'")
 
             return np.array(vectors), metadata
 
@@ -93,6 +72,18 @@ class WeaviateClient:
             if isinstance(e, HTTPException):
                 raise e
             raise HTTPException(status_code=500, detail=f"Weaviate query failed: {str(e)}")
+
+    def _process_object(self, obj, vectors, metadata, vector_field):
+        """Extract vector and metadata from a Weaviate object."""
+        if hasattr(obj, 'vector') and obj.vector:
+            vector_data = self._extract_vector(obj.vector, vector_field)
+            if vector_data:
+                vectors.append(vector_data)
+                metadata.append({
+                    'uuid': str(obj.uuid),
+                    'properties': obj.properties,
+                    'vector_length': len(vector_data)
+                })
 
     @staticmethod
     def _extract_vector(vector_dict: Dict, vector_field: Optional[str] = None) -> Optional[List[float]]:
