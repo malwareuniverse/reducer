@@ -1,4 +1,3 @@
-import os
 from os import getenv
 from traceback import print_exc
 from typing import Tuple, List, Dict, Any, Optional
@@ -146,8 +145,8 @@ class WeaviateClient:
 
     def _create_collection(self):
         # for testing, set up .env if needed
-        huggingface_url = os.getenv("HUGGINGFACE_URL", "http://huggingface:80/")
-        collection_name = os.getenv("COLLECTION_NAME", "Malware")
+        huggingface_url = getenv("HUGGINGFACE_URL", "http://huggingface:80/")
+        collection_name = getenv("COLLECTION_NAME", "Malware")
 
         try:
             self.client.collections.create(

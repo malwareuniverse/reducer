@@ -4,17 +4,18 @@ version = "0.0.1"
 description = ""
 requires-python = ">=3.11,<4.0"
 dependencies = [
-    "fastapi==0.115.12",
-    "uvicorn==0.34.2",
-    "typing-extensions==4.13.2",
+    "fastapi==0.129.0",
+    "uvicorn==0.40.0",
+    "pydantic==2.12.5",
+    "typing-extensions==4.15.0",
+    "python-dotenv==1.1.1",
     "numpy==2.2.6",
-    "pydantic==2.11.5",
-    "weaviate-client==4.14.4",
+    "scikit-learn==1.8.0",
+    "weaviate-client==4.19.2",
+    "packaging>=26.0",
     "pacmap==0.8.0",
     "umap-learn==0.5.7",
     "trimap==1.1.5",
-    "python-dotenv==1.1.1",
-    "scikit-learn==1.7.1",
     "hdbscan==0.8.40",
 ]
 
@@ -26,7 +27,7 @@ build-backend = "setuptools.build_meta"
 packages = ["model", "vec_database"]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = [

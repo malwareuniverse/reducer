@@ -1,9 +1,4 @@
 import weaviate
-import os
-from weaviate.collections.classes.internal import QueryReturn
-from weaviate.collections.classes.types import Properties, References
-from weaviate.connect import executor
-
 
 client = weaviate.connect_to_local(port=5000, grpc_port=50051)
 
@@ -16,6 +11,5 @@ response = collection.query.fetch_objects(
 
 for o in response.objects:
     print(o.vector['opcode_vector'])
-
 
 client.close()

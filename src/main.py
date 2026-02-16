@@ -11,7 +11,6 @@ import numpy as np
 # Own Modules
 from dimensionality_reducer import DRMethod, DRFactory
 from weaviate_client import WeaviateClient
-
 from clusterer import ClusterMethod, ClusterFactory
 
 # For random generation --> testing

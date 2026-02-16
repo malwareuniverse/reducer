@@ -1,5 +1,5 @@
 # Build Stage
-FROM docker.io/library/python:3.12-slim-bullseye as builder
+FROM docker.io/library/python:3.13-slim-bookworm as builder
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
@@ -12,19 +12,22 @@ RUN apt-get update && apt-get install -y \
 RUN pip install --upgrade pip setuptools wheel
 
 WORKDIR /app
-COPY pyproject.toml /app
-COPY . /app
-RUN pip install . --prefix=/install
+COPY pyproject.toml /app/
+COPY src/ /app/
+
+RUN pip install --upgrade pip setuptools wheel
+RUN pip install .
 
 # Runtime Stage
-FROM docker.io/library/python:3.12-slim-bullseye
+FROM docker.io/library/python:3.13-slim-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 RUN pip install --upgrade pip setuptools
 
 # Nur die installierten Pakete kopieren
-COPY --from=builder /install /usr/local
-COPY . /app
+COPY --from=builder /usr/local /usr/local 
+
+COPY src/ /app/
 WORKDIR /app
 
 EXPOSE 8000

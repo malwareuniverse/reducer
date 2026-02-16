@@ -1,7 +1,6 @@
-import traceback
+from traceback import print_exc
 
 import weaviate
-import os
 
 from pydantic import AnyHttpUrl
 from weaviate.classes.config import Configure, Property, DataType
@@ -69,7 +68,7 @@ try:
     )
 except Exception as e:
     print(e)
-    traceback.print_exc()
+    print_exc()
 
 
 def insert_malware(malware: MalwareData):
@@ -279,7 +278,7 @@ for sample in test_malware_samples:
         insert_malware(sample)
     except Exception as e:
         print(e)
-        traceback.print_exc()
+        print_exc()
 
 
 client.close()
