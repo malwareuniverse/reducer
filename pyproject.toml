@@ -14,7 +14,7 @@ dependencies = [
     "weaviate-client==4.19.4",
     "packaging>=26.0",
     "pacmap==0.8.0",
-    "umap-learn==0.5.11",
+    "umap-learn==0.5.12",
     "trimap==1.1.5",
     "hdbscan==0.8.41",
 ]
