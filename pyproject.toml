@@ -16,7 +16,7 @@ dependencies = [
     "pacmap==0.8.0",
     "umap-learn==0.5.11",
     "trimap==1.1.5",
-    "hdbscan==0.8.41",
+    "hdbscan==0.8.42",
 ]
 
 [build-system]
