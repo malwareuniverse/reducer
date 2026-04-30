@@ -5,7 +5,7 @@ description = ""
 requires-python = ">=3.11,<4.0"
 dependencies = [
     "fastapi==0.129.0",
-    "uvicorn==0.40.0",
+    "uvicorn==0.46.0",
     "pydantic==2.12.5",
     "typing-extensions==4.15.0",
     "python-dotenv==1.2.2",
