@@ -5,18 +5,18 @@ description = ""
 requires-python = ">=3.11,<4.0"
 dependencies = [
     "fastapi==0.129.0",
-    "uvicorn==0.40.0",
-    "pydantic==2.12.5",
+    "uvicorn==0.46.0",
+    "pydantic==2.13.3",
     "typing-extensions==4.15.0",
     "python-dotenv==1.2.2",
     "numpy==2.4.4",
     "scikit-learn==1.8.0",
     "weaviate-client==4.19.4",
-    "packaging>=26.0",
+    "packaging>=26.2",
     "pacmap==0.8.0",
-    "umap-learn==0.5.11",
+    "umap-learn==0.5.12",
     "trimap==1.1.5",
-    "hdbscan==0.8.41",
+    "hdbscan==0.8.42",
 ]
 
 [build-system]

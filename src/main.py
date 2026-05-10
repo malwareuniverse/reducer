@@ -5,6 +5,8 @@ import time
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
+
 from pydantic import BaseModel
 import numpy as np
 
@@ -79,6 +81,22 @@ app = FastAPI(
     version="2.1.0",
     lifespan=lifespan
 )
+    
+# CORS Configuration
+origins = [
+    "http://localhost:5173",  # Default Vite port
+    "http://localhost:3000",  # Default React port
+    "https://www.malwareuniverse.org",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.get(
     "/generate_data",
