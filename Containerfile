@@ -16,19 +16,18 @@ COPY pyproject.toml /app/
 COPY src/ /app/
 
 RUN pip install --upgrade pip setuptools wheel
-RUN pip install .
+RUN pip install . --target /packages
 
 # Runtime Stage
-FROM docker.io/library/python:3.13-slim-bookworm
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-RUN pip install --upgrade pip setuptools
-
-# Nur die installierten Pakete kopieren
-COPY --from=builder /usr/local /usr/local 
-
-COPY src/ /app/
+FROM gcr.io/distroless/python3-debian13:nonroot
+USER 1001:1001
 WORKDIR /app
 
+COPY --from=builder /packages /packages
+
+COPY src/ /app/
+
+ENV PYTHONPATH=/packages
+ENV NUMBA_CACHE_DIR=/tmp
 EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["standalone.py"]

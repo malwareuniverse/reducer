@@ -1,3 +1,4 @@
+from sys import exit
 from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any
 
@@ -81,14 +82,27 @@ class AvailableMethodsResponse(BaseModel):
 class RootResponse(BaseModel):
     status: str
 
+MAX_RETRIES = 3
+RETRY_DELAY = 10
 
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI):
     global weaviate_client
-    weaviate_client = WeaviateClient()
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            weaviate_client = WeaviateClient()
+            print("Successfully connected to Weaviate")
+            break
+        except Exception as e:
+            print(f"Weaviate Error (Attempt {attempt}/{MAX_RETRIES}): {e}")
+            if attempt < MAX_RETRIES:
+                print(f"Wait {RETRY_DELAY} seconds before the next attempt...")
+                time.sleep(RETRY_DELAY)
+            else:
+                print("Maximum number of connection attempts reached. Close the app.")
+                exit(1)
     yield
-    if weaviate_client:
-        weaviate_client.close()
+
 
 
 def get_weaviate_client() -> Optional[WeaviateClient]:
