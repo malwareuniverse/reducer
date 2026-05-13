@@ -18,7 +18,8 @@ class DRMethod(str, Enum):
 class DimensionalityReducer(ABC):
     """Abstract base class for dimensionality reduction algorithms"""
 
-    def __init__(self, n_components: int = 3, random_state: int = 42, **kwargs):
+    def __init__(self, n_components: int = 3,
+                 random_state: int = 42, **kwargs):
         self.n_components = n_components
         self.random_state = random_state
         self.kwargs = kwargs
@@ -75,7 +76,9 @@ class UMAPReducer(DimensionalityReducer):
 
 
 class TriMAPReducer(DimensionalityReducer):
-    """TriMAP dimensionality reduction"""
+    """
+    TriMAP dimensionality reduction
+    """
 
     def fit_transform(self, X: np.ndarray) -> np.ndarray:
         reducer = TRIMAP(
@@ -102,14 +105,21 @@ class DRFactory:
     }
 
     @classmethod
-    def create_reducer(cls, method: DRMethod, n_components: int = 3,
-                       random_state: int = 42, **kwargs) -> DimensionalityReducer:
+    def create_reducer(cls,
+                       method: DRMethod,
+                       n_components: int = 3,
+                       random_state: int = 42,
+                       **kwargs) -> DimensionalityReducer:
         """Create a dimensionality reducer instance"""
         if method not in cls._reducers:
-            raise ValueError(f"Unknown method: {method}. Available methods: {list(cls._reducers.keys())}")
+            raise ValueError(f"""
+                             Unknown method: {method}.
+                             Available methods: {list(cls._reducers.keys())}
+                             """)
 
         reducer_class = cls._reducers[method]
-        return reducer_class(n_components=n_components, random_state=random_state, **kwargs)
+        return reducer_class(n_components=n_components,
+                             random_state=random_state, **kwargs)
 
     @classmethod
     def get_available_methods(cls) -> list[str]:

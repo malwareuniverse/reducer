@@ -22,25 +22,39 @@ D_dimensions = 1024
 # global - client
 weaviate_client = None
 
+
 # Pydantic Response Models
 class WeaviateResult(BaseModel):
-    """Represents a single data point with its transformed embedding and original metadata."""
+    """
+    Represents a single data point with its
+    transformed embedding and original metadata.
+    """
     embedding: List[float]
     metadata: Dict[str, Any]
 
+
 class BaseDataResponse(BaseModel):
-    """Base response containing fields common to all data-returning endpoints."""
+    """
+    Base response containing fields
+    common to all data-returning endpoints.
+    """
     shape: List[int]
     method_applied: str
     dr_applied: bool
     message: str
+
 
 class GenerateDataResponse(BaseDataResponse):
     """Response for randomly generated data."""
     data: List[List[float]]
     data_source: str = "random"
 
+
 class QueryWeaviateResponse(BaseDataResponse):
+    """
+    Response for querying Weaviate,
+    applying clustering, and applying dimensionality reduction.
+    """
     data_source: str = "weaviate"
     collection_name: str
     original_vector_count: int
@@ -49,18 +63,24 @@ class QueryWeaviateResponse(BaseDataResponse):
     clustering_method_applied: Optional[str] = None
     results: List[WeaviateResult]
 
+
 class AvailableClusteringMethodsResponse(BaseModel):
     available_methods: List[str]
     all_methods: List[str]
+
+
 class WeaviateCollectionsResponse(BaseModel):
     collections: List[str]
+
 
 class AvailableMethodsResponse(BaseModel):
     available_methods: List[str]
     all_methods: List[str]
 
+
 class RootResponse(BaseModel):
     status: str
+
 
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI):
@@ -70,18 +90,24 @@ async def lifespan(fastapi_app: FastAPI):
     if weaviate_client:
         weaviate_client.close()
 
+
 def get_weaviate_client() -> Optional[WeaviateClient]:
     if weaviate_client is None:
-        raise HTTPException(status_code=500, detail="Weaviate client not initialized")
+        raise HTTPException(status_code=500,
+                            detail="Weaviate client not initialized"
+                            )
     return weaviate_client
+
 
 app = FastAPI(
     title="Multi-Algorithm Dimensionality Reduction API with Weaviate",
-    description=f"Generates random data or queries Weaviate, then applies various DR algorithms.",
-    version="2.1.0",
+    description="""
+                Generates random data or queries Weaviate,
+                then applie various DR algorithms.
+                """,
     lifespan=lifespan
 )
-    
+
 # CORS Configuration
 origins = [
     "http://localhost:5173",  # Default Vite port
@@ -102,7 +128,10 @@ app.add_middleware(
     "/generate_data",
     response_model=GenerateDataResponse,
     summary="Generate random data with optional dimensionality reduction",
-    response_description="A JSON object containing the generated data or DR embedding."
+    response_description="""
+                        JSON object containing the generated data
+                        or DR embedding.
+                        """
 )
 async def generate_and_transform_data(
         apply_dr: bool = True,
@@ -119,7 +148,9 @@ async def generate_and_transform_data(
         trimap_n_random: int = 5,
         verbose: bool = True
 ) -> GenerateDataResponse:
-    """Generate random dataset and optionally apply dimensionality reduction."""
+    """
+    Generate random dataset and optionally apply dimensionality reduction.
+    """
 
     X_test_data = np.random.randn(N_samples, D_dimensions)
 
@@ -129,7 +160,10 @@ async def generate_and_transform_data(
         dr_error = None
         method_name = "None"
     else:
-        data_to_return, dr_applied_result, dr_error, method_name = _apply_dimensionality_reduction(
+        data_to_return,
+        dr_applied_result,
+        dr_error,
+        method_name = _apply_dimensionality_reduction(
             X_test_data, apply_dr, dr_method, n_components,
             pacmap_n_neighbors, pacmap_mn_ratio, pacmap_fp_ratio,
             umap_n_neighbors, umap_min_dist, umap_metric,
@@ -138,7 +172,12 @@ async def generate_and_transform_data(
         )
 
     result_list = data_to_return.tolist()
-    message = _get_response_message(dr_applied_result, dr_error, method_name, dr_method, n_components)
+    message = _get_response_message(dr_applied_result,
+                                    dr_error,
+                                    method_name,
+                                    dr_method,
+                                    n_components
+                                    )
 
     return GenerateDataResponse(
         shape=list(data_to_return.shape),
@@ -153,8 +192,14 @@ async def generate_and_transform_data(
 @app.get(
     "/query_weaviate",
     response_model=QueryWeaviateResponse,
-    summary="Query Weaviate, apply clustering, and apply dimensionality reduction",
-    response_description="A JSON object containing Weaviate data with optional clustering and DR."
+    summary="""
+            Query Weaviate, apply clustering,
+            and apply dimensionality reduction
+            """,
+    response_description="""
+                         JSON object containing Weaviate data with optional
+                         clustering and DR.
+                        """
 )
 async def query_and_transform_weaviate_data(
         # Weaviate Query Parameters
@@ -189,7 +234,8 @@ async def query_and_transform_weaviate_data(
         client: WeaviateClient = Depends(get_weaviate_client)
 ) -> QueryWeaviateResponse:
     """
-    Query Weaviate for vectors, then optionally apply clustering and/or dimensionality reduction.
+    Query Weaviate for vectors, then optionally apply clustering and/or
+    dimensionality reduction.
 
     - **Clustering** is performed on the original high-dimensional vectors.
     - **Dimensionality Reduction** is also performed on the original vectors.
@@ -224,7 +270,12 @@ async def query_and_transform_weaviate_data(
         for point, meta in zip(result_points, metadata)
     ]
 
-    dr_message = _get_response_message(dr_applied, dr_error, dr_method_name, dr_method, n_components)
+    dr_message = _get_response_message(dr_applied,
+                                       dr_error,
+                                       dr_method_name,
+                                       dr_method,
+                                       n_components
+                                       )
 
     cluster_message = ""
     if not apply_clustering:
@@ -280,6 +331,7 @@ async def get_weaviate_collection_info(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get collection info: {str(e)}")
 
+
 @app.get(
     "/available_clustering_methods",
     response_model=AvailableClusteringMethodsResponse,
@@ -291,9 +343,11 @@ async def get_available_clustering_methods() -> AvailableClusteringMethodsRespon
         all_methods=[method.value for method in ClusterMethod]
     )
 
+
 @app.get("/", response_model=RootResponse)
 async def read_root() -> RootResponse:
     return RootResponse(status="Multi-Algorithm Dimensionality Reduction & Clustering API with Weaviate is running")
+
 
 @app.get(
     "/available_methods",
@@ -305,6 +359,7 @@ async def get_available_methods() -> AvailableMethodsResponse:
         available_methods=DRFactory.get_available_methods(),
         all_methods=[method.value for method in DRMethod]
     )
+
 
 # Helper functions
 def _apply_dimensionality_reduction(X_data, apply_dr, dr_method, n_components, *args):
@@ -370,6 +425,7 @@ def _apply_dimensionality_reduction(X_data, apply_dr, dr_method, n_components, *
         print(f"\nAn error occurred during {dr_method.value} execution: {e}")
         return X_data, False, str(e), "None"
 
+
 # Helper functions
 def _get_response_message(dr_applied, dr_error, method_name, dr_method, n_components):
     """Get appropriate response message"""
@@ -389,7 +445,10 @@ def _apply_clustering(X_data, apply_clustering, cluster_method, *args):
     (hdbscan_min_cluster_size, hdbscan_min_samples, hdbscan_metric, verbose) = args
 
     if len(X_data) < hdbscan_min_cluster_size:
-        error_msg = f"Not enough data points ({len(X_data)}) to cluster. HDBSCAN requires at least 'min_cluster_size' points ({hdbscan_min_cluster_size})."
+        error_msg = f"""
+                    Not enough data points ({len(X_data)}) to cluster.
+                    HDBSCAN requires at least {hdbscan_min_cluster_size} points
+                    """
         return None, False, error_msg, "None"
 
     available_methods = ClusterFactory.get_available_methods()
@@ -423,6 +482,7 @@ def _apply_clustering(X_data, apply_clustering, cluster_method, *args):
         error_str = f"An error occurred during {cluster_method.value} clustering: {e}"
         print(f"\n{error_str}")
         return None, False, str(e), "None"
+
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8011, reload=True)

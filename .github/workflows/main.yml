@@ -1,9 +1,12 @@
-name: Docker Image for Reducer
+name: Container Image for Reducer
 
 on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
+      - "*.*.*"
   workflow_dispatch:
 
 env:
@@ -19,26 +22,32 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
 
-      - name: Log in to the Container registry
-        uses: docker/login-action@v2.1.0
+      - name: Determine tags
+        id: determine_tags
+        shell: bash
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "tags=${{ github.ref_name }} latest" >> $GITHUB_OUTPUT
+          else
+            echo "tags=latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Buildah Action
+        id: build_image
+        uses: redhat-actions/buildah-build@v2
         with:
+          image: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME }}
+          tags: ${{ steps.determine_tags.outputs.tags }}
+          oci: true
+          containerfile: Containerfile
+
+      - name: Push to GitHub Container Registry
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build_image.outputs.image }}
+          tags: ${{ steps.build_image.outputs.tags }}
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v4.3.0
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME }}
-          tags: latest
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v4.0.0
-        with:
-          file: Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}

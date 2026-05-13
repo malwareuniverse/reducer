@@ -1,25 +1,15 @@
 from abc import ABC, abstractmethod
 from enum import Enum
+from hdbscan import HDBSCAN
+from sklearn.cluster import KMeans
 import numpy as np
-
-
-try:
-    import hdbscan
-    HDBSCAN_AVAILABLE = True
-except ImportError:
-    HDBSCAN_AVAILABLE = False
-
-try:
-    from sklearn.cluster import KMeans
-    SKLEARN_AVAILABLE = True
-except ImportError:
-    SKLEARN_AVAILABLE = False
 
 
 class ClusterMethod(str, Enum):
     """Enum for available clustering methods."""
     HDBSCAN = "hdbscan"
-    KMEANS = "kmeans" # k-means added here, but can't be used. User would need to know k-cluster
+    # k-means added here, but can't be used. User would need to know k-cluster
+    KMEANS = "kmeans"
 
 
 class BaseClusterer(ABC):
@@ -32,13 +22,15 @@ class BaseClusterer(ABC):
     @abstractmethod
     def fit_predict(self, X: np.ndarray) -> np.ndarray:
         """
-        Fits the clustering model to the data and returns the cluster labels for each point.
+        Fits the clustering model to the data and
+        returns the cluster labels for each point.
 
         Args:
             X: A numpy array of shape (n_samples, n_features).
 
         Returns:
-            A numpy array of shape (n_samples,) containing the integer label for each sample.
+            A numpy array of shape (n_samples,)
+            containing the integer label for each sample.
             By convention, -1 is used for noise/outliers.
         """
         pass
@@ -49,12 +41,10 @@ class HDBSCANClusterer(BaseClusterer):
 
     def __init__(self, **kwargs):
         super().__init__()
-        if not HDBSCAN_AVAILABLE:
-            raise ImportError("hdbscan library is not installed. Please run 'pip install hdbscan'")
 
         # Make the model more performant by default
         kwargs.setdefault('core_dist_n_jobs', -1)
-        self.model = hdbscan.HDBSCAN(**kwargs)
+        self.model = HDBSCAN(**kwargs)
         self.name = "HDBSCAN"
 
     def fit_predict(self, X: np.ndarray) -> np.ndarray:
@@ -70,8 +60,6 @@ class KMeansClusterer(BaseClusterer):
 
     def __init__(self, **kwargs):
         super().__init__()
-        if not SKLEARN_AVAILABLE:
-            raise ImportError("scikit-learn library is not installed. Please run 'pip install scikit-learn'")
 
         kwargs.setdefault('n_clusters', 8)
         kwargs.setdefault('init', 'k-means++')
@@ -82,7 +70,8 @@ class KMeansClusterer(BaseClusterer):
 
     def fit_predict(self, X: np.ndarray) -> np.ndarray:
         """
-        Fits KMeans and returns cluster labels. Note: KMeans does not produce noise points (-1).
+        Fits KMeans and returns cluster labels.
+        Note: KMeans does not produce noise points (-1).
         All points are assigned to a cluster.
         """
         return self.model.fit_predict(X)
@@ -108,15 +97,16 @@ class ClusterFactory:
         elif method == ClusterMethod.KMEANS:
             return KMeansClusterer(**kwargs)
         else:
-            raise ValueError(f"Unknown or unavailable clustering method: {method}")
+            raise ValueError(f"""
+                            Unknown or unavailable clustering method: {method}
+                            """)
 
     @staticmethod
     def get_available_methods() -> list[str]:
         """Returns a list of currently available clustering method names."""
         methods = []
-        if HDBSCAN_AVAILABLE:
-            methods.append(ClusterMethod.HDBSCAN.value)
-        if SKLEARN_AVAILABLE:
-            methods.append(ClusterMethod.KMEANS.value)
-        return methods
 
+        methods.append(ClusterMethod.HDBSCAN.value)
+        methods.append(ClusterMethod.KMEANS.value)
+
+        return methods

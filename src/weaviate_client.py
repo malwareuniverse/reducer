@@ -3,15 +3,15 @@ from traceback import print_exc
 from typing import Tuple, List, Dict, Any, Optional
 
 from weaviate import connect_to_custom, connect_to_local
-from weaviate.collections.classes.config import Configure, Property, DataType
-from pydantic import AnyHttpUrl
 import numpy as np
 from fastapi import HTTPException
 
 
-
-"""Wrapper for Weaviate Client. Helps forward Weaviate errors to fastapi."""
 class WeaviateClient:
+    """
+    Wrapper for Weaviate Client.
+    Helps forward Weaviate errors to fastapi.
+    """
 
     def __init__(self, port: int = 5000, grpc_port: int = 50051):
         self.port = port
@@ -29,11 +29,14 @@ class WeaviateClient:
             weaviate_grpc_port = getenv("WEAVIATE_GRPC_PORT", 50051)
             weaviate_grpc_secure = getenv("WEAVIATE_GRPC_SECURE", False)
 
-
             if weaviate_host:
                 self.client = connect_to_custom(
-                    http_host=weaviate_host, http_port=int(weaviate_http_port), http_secure=bool(weaviate_http_secure),
-                    grpc_host=weaviate_host, grpc_port=int(weaviate_grpc_port), grpc_secure=bool(weaviate_grpc_secure)
+                    http_host=weaviate_host,
+                    http_port=int(weaviate_http_port),
+                    http_secure=bool(weaviate_http_secure),
+                    grpc_host=weaviate_host,
+                    grpc_port=int(weaviate_grpc_port),
+                    grpc_secure=bool(weaviate_grpc_secure)
                 )
             else:
                 self.client = connect_to_local(
@@ -44,10 +47,16 @@ class WeaviateClient:
             print(e)
             raise ConnectionError(f"Failed to connect to Weaviate: {str(e)}")
 
-    def query_vectors(self, collection_name: str, query: str, limit: Optional[int] = None,
-                      vector_field: Optional[str] = None) -> Tuple[np.ndarray, List[Dict[str, Any]]]:
+    def query_vectors(self,
+                      collection_name: str,
+                      query: str,
+                      limit: Optional[int] = None,
+                      vector_field: Optional[str] = None
+                      ) -> Tuple[np.ndarray, List[Dict[str, Any]]]:
         if not self.client:
-            raise HTTPException(status_code=500, detail="Weaviate client not initialized")
+            raise HTTPException(status_code=500,
+                                detail="Weaviate client not initialized"
+                                )
 
         try:
             collection = self.client.collections.get(collection_name)
@@ -58,19 +67,30 @@ class WeaviateClient:
                 for obj in collection.iterator(include_vector=True):
                     self._process_object(obj, vectors, metadata, vector_field)
             else:
-                response = collection.query.fetch_objects(limit=limit, include_vector=True)
+                response = collection.query.fetch_objects(limit=limit,
+                                                          include_vector=True
+                                                          )
                 for obj in response.objects:
-                    self._process_object(obj, vectors, metadata, vector_field)
+                    self._process_object(obj,
+                                         vectors,
+                                         metadata,
+                                         vector_field)
 
             if not vectors:
-                raise HTTPException(status_code=404, detail=f"No vectors found in collection: '{collection_name}'")
+                raise HTTPException(status_code=404,
+                                    detail=f"""
+                                            No vectors found in collection:
+                                            {collection_name}
+                                            """)
 
             return np.array(vectors), metadata
 
         except Exception as e:
             if isinstance(e, HTTPException):
                 raise e
-            raise HTTPException(status_code=500, detail=f"Weaviate query failed: {str(e)}")
+            raise HTTPException(status_code=500,
+                                detail=f"Weaviate query failed: {str(e)}"
+                                )
 
     def _process_object(self, obj, vectors, metadata, vector_field):
         """Extract vector and metadata from a Weaviate object."""
@@ -85,7 +105,9 @@ class WeaviateClient:
                 })
 
     @staticmethod
-    def _extract_vector(vector_dict: Dict, vector_field: Optional[str] = None) -> Optional[List[float]]:
+    def _extract_vector(vector_dict: Dict,
+                        vector_field: Optional[str] = None
+                        ) -> Optional[List[float]]:
         """Extract vector data from Weaviate response"""
         if vector_field and vector_field in vector_dict:
             return vector_dict[vector_field]
@@ -103,22 +125,30 @@ class WeaviateClient:
     def list_collections(self) -> dict:
         """List all available collections"""
         if not self.client:
-            raise HTTPException(status_code=500, detail="Weaviate client not initialized")
+            raise HTTPException(status_code=500,
+                                detail="Weaviate client not initialized"
+                                )
 
         try:
             collections = self.client.collections.list_all()
             return collections
         except Exception as e:
             print_exc()
-            raise HTTPException(status_code=500, detail=f"Failed to list collections: {str(e)}")
+            raise HTTPException(status_code=500,
+                                detail=f"Failed to list collections: {str(e)}"
+                                )
 
     def get_collection_info(self, collection_name: str) -> Dict[str, Any]:
         if not self.client:
-            raise HTTPException(status_code=500, detail="Weaviate client not initialized")
+            raise HTTPException(status_code=500,
+                                detail="Weaviate client not initialized"
+                                )
 
         try:
             collection = self.client.collections.get(collection_name)
-            sample = collection.query.fetch_objects(limit=1, include_vector=True)
+            sample = collection.query.fetch_objects(limit=1,
+                                                    include_vector=True
+                                                    )
 
             info = {
                 "name": collection_name,
@@ -143,44 +173,6 @@ class WeaviateClient:
                 "error": str(e)
             }
 
-    def _create_collection(self):
-        # for testing, set up .env if needed
-        huggingface_url = getenv("HUGGINGFACE_URL", "http://huggingface:80/")
-        collection_name = getenv("COLLECTION_NAME", "Malware")
-
-        try:
-            self.client.collections.create(
-                collection_name,
-                vectorizer_config=[
-                    Configure.NamedVectors.text2vec_huggingface(
-                        name="opcode_vector",
-                        source_properties=["op_code"],
-                        endpoint_url=AnyHttpUrl(huggingface_url)
-                    )
-                ],
-                properties=[
-                    Property(name="op_code", data_type=DataType.TEXT),
-                    Property(name="sha256_hash", data_type=DataType.TEXT, skip_vectorization=True),
-                    Property(name="sha3_384_hash", data_type=DataType.TEXT, skip_vectorization=True),
-                    Property(name="sha1_hash", data_type=DataType.TEXT, skip_vectorization=True),
-                    Property(name="md5_hash", data_type=DataType.TEXT, skip_vectorization=True),
-                    Property(name="first_seen", data_type=DataType.TEXT, skip_vectorization=True),
-                    Property(name="last_seen", data_type=DataType.TEXT, skip_vectorization=True),
-                    Property(name="file_name", data_type=DataType.TEXT, skip_vectorization=True),
-                    Property(name="file_size", data_type=DataType.INT, skip_vectorization=True),
-                    Property(name="file_type_mime", data_type=DataType.TEXT, skip_vectorization=True),
-                    Property(name="file_type", data_type=DataType.TEXT, skip_vectorization=True),
-                    Property(name="reporter", data_type=DataType.TEXT, skip_vectorization=True),
-                    Property(name="tags", data_type=DataType.TEXT_ARRAY, skip_vectorization=True),
-                    Property(name="malware_family", data_type=DataType.TEXT, skip_vectorization=True),
-                    Property(name="threat_actor", data_type=DataType.TEXT, skip_vectorization=True),
-                    Property(name="contacted_domains", data_type=DataType.TEXT_ARRAY, skip_vectorization=True),
-                    Property(name="strings_extracted", data_type=DataType.TEXT_ARRAY, skip_vectorization=True),
-                ]
-            )
-        except Exception as e:
-            print(e)
-
     def close(self):
         """Close the Weaviate client connection"""
         if self.client:
@@ -192,8 +184,3 @@ class WeaviateClient:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
-
-
-def create_weaviate_client(port: int = 5000, grpc_port: int = 50051) -> WeaviateClient:
-    """Create a new Weaviate client instance"""
-    return WeaviateClient(port=port, grpc_port=grpc_port)
