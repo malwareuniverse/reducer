@@ -41,7 +41,6 @@ jobs:
           image: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME }}
           tags: ${{ steps.determine_tags.outputs.tags }}
           oci: true
-          containerfile: Containerfile
 
       - name: Push to GitHub Container Registry
         uses: redhat-actions/push-to-registry@v2
