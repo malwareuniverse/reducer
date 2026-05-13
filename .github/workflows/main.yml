@@ -41,7 +41,8 @@ jobs:
           image: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME }}
           tags: ${{ steps.determine_tags.outputs.tags }}
           oci: true
-          containerfiles: containerfile
+          containerfiles: |
+            ./Containerfile
           context: .
 
       - name: Push to GitHub Container Registry
