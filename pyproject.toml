@@ -13,7 +13,7 @@ dependencies = [
     "scikit-learn==1.8.0",
     "weaviate-client==4.19.4",
     "packaging>=26.2",
-    "pacmap==0.8.0",
+    "pacmap==0.9.1",
     "umap-learn==0.5.12",
     "trimap==1.1.5",
     "hdbscan==0.8.42",
