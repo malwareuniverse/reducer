@@ -9,7 +9,7 @@ dependencies = [
     "pydantic==2.13.4",
     "typing-extensions==4.15.0",
     "python-dotenv==1.2.2",
-    "numpy==2.4.4",
+    "numpy==2.4.6",
     "scikit-learn==1.8.0",
     "weaviate-client==4.21.2",
     "packaging>=26.2",
