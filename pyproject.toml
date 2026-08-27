@@ -11,7 +11,7 @@ dependencies = [
     "python-dotenv==1.2.3",
     "numpy==2.4.6",
     "scikit-learn==1.9.0",
-    "weaviate-client==4.22.0",
+    "weaviate-client==4.23.0",
     "packaging>=26.3",
     "pacmap==0.9.1",
     "umap-learn==0.5.12",
