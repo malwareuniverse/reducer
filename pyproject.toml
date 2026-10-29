@@ -6,7 +6,7 @@ requires-python = ">=3.11,<4.0"
 dependencies = [
     "fastapi==0.142.2",
     "uvicorn==0.54.0",
-    "pydantic==2.13.5",
+    "pydantic==2.14.1",
     "typing-extensions==4.16.0",
     "python-dotenv==1.2.4",
     "numpy==2.4.6",
