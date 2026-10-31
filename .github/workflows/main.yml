@@ -38,7 +38,7 @@ jobs:
         id: build_image
         uses: redhat-actions/buildah-build@v3.1.0
         with:
-          image: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME }}
+          image: ${{ env.IMAGE_NAME }}
           tags: ${{ steps.determine_tags.outputs.tags }}
           oci: true
           containerfiles: |
